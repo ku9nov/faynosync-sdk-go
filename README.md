@@ -30,7 +30,7 @@ func main() {
 
 	resp, err := client.CheckForUpdates(context.Background(), faynosync.CheckOptions{
 		Owner:    "admin",
-		AppName:  "tuf",
+		AppName:  "test",
 		Version:  "0.0.0.5",
 		Channel:  "nightly",
 		Platform: "darwin",
@@ -78,7 +78,7 @@ The client is safe for concurrent use.
 ```go
 resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
 	Owner:    "admin",
-	AppName:  "tuf",
+	AppName:  "test",
 	Version:  "0.0.0.5",
 	Channel:  "nightly",
 	Platform: "darwin",
@@ -94,7 +94,7 @@ resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
 The BaseURL API request uses `GET /checkVersion`:
 
 ```text
-GET /checkVersion?app_name=tuf&version=0.0.0.5&channel=nightly&platform=darwin&arch=arm64&owner=admin
+GET /checkVersion?app_name=test&version=0.0.0.5&channel=nightly&platform=darwin&arch=arm64&owner=admin
 X-Device-ID: optional
 ```
 
@@ -148,7 +148,7 @@ GET /responses/{owner}/{app_name}/{channel}/{platform}/{arch}/{version}.json
 For example:
 
 ```text
-GET /responses/admin/tuf/nightly/darwin/arm64/0.0.0.5.json
+GET /responses/admin/test/nightly/darwin/arm64/0.0.0.5.json
 ```
 
 If the edge response succeeds with HTTP 200 and valid JSON, `UpdateResponse.Source` is `SourceEdge`.
