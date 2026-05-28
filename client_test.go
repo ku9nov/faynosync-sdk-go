@@ -112,6 +112,228 @@ func TestCheckForUpdatesUsesEdgeStaticResponse(t *testing.T) {
 	}
 }
 
+func TestCheckForUpdatesSendsTelemetryBeaconAfterEdgeSuccess(t *testing.T) {
+	t.Parallel()
+
+	apiCalled := false
+	telemetryCalled := false
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/telemetry/beacon":
+			telemetryCalled = true
+			if r.URL.Query().Get("app_name") != "test" {
+				t.Fatalf("unexpected app_name: %s", r.URL.Query().Get("app_name"))
+			}
+			if r.URL.Query().Get("version") != "0.0.0.5" {
+				t.Fatalf("unexpected version: %s", r.URL.Query().Get("version"))
+			}
+			if r.URL.Query().Get("channel") != "nightly" {
+				t.Fatalf("unexpected channel: %s", r.URL.Query().Get("channel"))
+			}
+			if r.URL.Query().Get("platform") != "darwin" {
+				t.Fatalf("unexpected platform: %s", r.URL.Query().Get("platform"))
+			}
+			if r.URL.Query().Get("arch") != "arm64" {
+				t.Fatalf("unexpected arch: %s", r.URL.Query().Get("arch"))
+			}
+			if r.URL.Query().Get("owner") != "admin" {
+				t.Fatalf("unexpected owner: %s", r.URL.Query().Get("owner"))
+			}
+			if r.URL.Query().Get("is_latest") != "false" {
+				t.Fatalf("unexpected is_latest: %s", r.URL.Query().Get("is_latest"))
+			}
+			if r.Header.Get("X-Device-ID") != "device-1" {
+				t.Fatalf("unexpected X-Device-ID: %s", r.Header.Get("X-Device-ID"))
+			}
+			w.WriteHeader(http.StatusOK)
+		case "/checkVersion":
+			apiCalled = true
+			http.Error(w, "api should not be called", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiServer.Close()
+
+	edgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, UpdateResponse{
+			UpdateAvailable: true,
+		})
+	}))
+	defer edgeServer.Close()
+
+	client := NewClient(Config{
+		BaseURL: apiServer.URL,
+		EdgeURL: edgeServer.URL,
+	})
+	resp, err := client.CheckForUpdates(context.Background(), CheckOptions{
+		Owner:    "admin",
+		AppName:  "test",
+		Version:  "0.0.0.5",
+		Channel:  "nightly",
+		Platform: "darwin",
+		Arch:     "arm64",
+		DeviceID: "device-1",
+	})
+	if err != nil {
+		t.Fatalf("CheckForUpdates returned error: %v", err)
+	}
+	if resp.Source != SourceEdge {
+		t.Fatalf("unexpected source: %v", resp.Source)
+	}
+	if !telemetryCalled {
+		t.Fatal("expected telemetry beacon call after edge success")
+	}
+	if apiCalled {
+		t.Fatal("api fallback should not be called after edge success")
+	}
+}
+
+func TestCheckForUpdatesTelemetryBeaconIsLatestFromEdgeResponse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		updateAvailable bool
+		wantIsLatest    string
+	}{
+		{
+			name:            "update available means not latest",
+			updateAvailable: true,
+			wantIsLatest:    "false",
+		},
+		{
+			name:            "no update means latest",
+			updateAvailable: false,
+			wantIsLatest:    "true",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			telemetryIsLatest := ""
+			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/telemetry/beacon" {
+					http.NotFound(w, r)
+					return
+				}
+				telemetryIsLatest = r.URL.Query().Get("is_latest")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer apiServer.Close()
+
+			edgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(t, w, UpdateResponse{
+					UpdateAvailable: tt.updateAvailable,
+				})
+			}))
+			defer edgeServer.Close()
+
+			client := NewClient(Config{
+				BaseURL: apiServer.URL,
+				EdgeURL: edgeServer.URL,
+			})
+			_, err := client.CheckForUpdates(context.Background(), CheckOptions{
+				Owner:    "admin",
+				AppName:  "test",
+				Version:  "0.0.0.5",
+				Channel:  "nightly",
+				Platform: "darwin",
+				Arch:     "arm64",
+				DeviceID: "device-1",
+			})
+			if err != nil {
+				t.Fatalf("CheckForUpdates returned error: %v", err)
+			}
+			if telemetryIsLatest != tt.wantIsLatest {
+				t.Fatalf("unexpected is_latest: got %s, want %s", telemetryIsLatest, tt.wantIsLatest)
+			}
+		})
+	}
+}
+
+func TestCheckForUpdatesDoesNotSendTelemetryWithoutDeviceID(t *testing.T) {
+	t.Parallel()
+
+	telemetryCalled := false
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/telemetry/beacon" {
+			telemetryCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer apiServer.Close()
+
+	edgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, UpdateResponse{
+			UpdateAvailable: false,
+		})
+	}))
+	defer edgeServer.Close()
+
+	client := NewClient(Config{
+		BaseURL: apiServer.URL,
+		EdgeURL: edgeServer.URL,
+	})
+	resp, err := client.CheckForUpdates(context.Background(), defaultOptions())
+	if err != nil {
+		t.Fatalf("CheckForUpdates returned error: %v", err)
+	}
+	if resp.Source != SourceEdge {
+		t.Fatalf("unexpected source: %v", resp.Source)
+	}
+	if telemetryCalled {
+		t.Fatal("expected no telemetry beacon call when device id is missing")
+	}
+}
+
+func TestCheckForUpdatesIgnoresTelemetryFailureAfterEdgeSuccess(t *testing.T) {
+	t.Parallel()
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/telemetry/beacon" {
+			http.Error(w, "telemetry failed", http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer apiServer.Close()
+
+	edgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, UpdateResponse{
+			UpdateAvailable: true,
+			UpdateURL:       "https://downloads.example/app",
+		})
+	}))
+	defer edgeServer.Close()
+
+	client := NewClient(Config{
+		BaseURL: apiServer.URL,
+		EdgeURL: edgeServer.URL,
+	})
+	resp, err := client.CheckForUpdates(context.Background(), CheckOptions{
+		Owner:    "admin",
+		AppName:  "test",
+		Version:  "0.0.0.5",
+		Channel:  "nightly",
+		Platform: "darwin",
+		Arch:     "arm64",
+		DeviceID: "device-1",
+	})
+	if err != nil {
+		t.Fatalf("CheckForUpdates returned error: %v", err)
+	}
+	if resp.Source != SourceEdge {
+		t.Fatalf("unexpected source: %v", resp.Source)
+	}
+	if resp.UpdateURL != "https://downloads.example/app" {
+		t.Fatalf("unexpected update URL: %s", resp.UpdateURL)
+	}
+}
+
 func TestCheckForUpdatesFallsBackFromEdge404ToAPI(t *testing.T) {
 	t.Parallel()
 

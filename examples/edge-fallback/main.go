@@ -13,7 +13,7 @@ import (
 func main() {
 	client := faynosync.NewClient(faynosync.Config{
 		BaseURL: "http://localhost:9000",
-		EdgeURL: "http://faynosync-cdn-edge.web.garage.localhost:3902",
+		EdgeURL: "http://cb-faynosync-s3-public.web.garage.localhost:3902",
 	})
 
 	resp, err := client.CheckForUpdates(context.Background(), faynosync.CheckOptions{
@@ -23,6 +23,7 @@ func main() {
 		Channel:  "nightly",
 		Platform: "darwin",
 		Arch:     "arm64",
+		DeviceID: "device-1-fnsj",
 	})
 	if err != nil {
 		if errors.Is(err, faynosync.ErrRequestFailed) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +31,9 @@ func (c *Client) CheckForUpdates(ctx context.Context, opts CheckOptions) (*Updat
 	if c.edgeURL != "" {
 		resp, err := c.checkEdge(ctx, opts)
 		if err == nil {
+			if opts.DeviceID != "" {
+				_ = c.sendEdgeTelemetryBeacon(ctx, opts, !resp.UpdateAvailable)
+			}
 			resp.Source = SourceEdge
 			return resp, nil
 		}
@@ -165,6 +169,56 @@ func (c *Client) edgeCheckURL(opts CheckOptions) (string, error) {
 	u.RawQuery = ""
 
 	return u.String(), nil
+}
+
+func (c *Client) edgeTelemetryBeaconURL(opts CheckOptions, isLatest bool) (string, error) {
+	u, err := parseAbsoluteURL(c.baseURL, ErrInvalidBaseURL)
+	if err != nil {
+		return "", err
+	}
+
+	u.Path = joinURLPath(u.Path, "telemetry/beacon")
+	u.RawPath = ""
+
+	values := u.Query()
+	values.Set("app_name", opts.AppName)
+	values.Set("version", opts.Version)
+	values.Set("channel", opts.Channel)
+	values.Set("platform", opts.Platform)
+	values.Set("arch", opts.Arch)
+	values.Set("owner", opts.Owner)
+	values.Set("is_latest", strconv.FormatBool(isLatest))
+	u.RawQuery = values.Encode()
+
+	return u.String(), nil
+}
+
+func (c *Client) sendEdgeTelemetryBeacon(ctx context.Context, opts CheckOptions, isLatest bool) error {
+	endpoint, err := c.edgeTelemetryBeaconURL(opts, isLatest)
+	if err != nil {
+		return &EndpointError{Source: SourceEdge, URL: c.baseURL, Err: err}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return &EndpointError{Source: SourceEdge, URL: endpoint, Err: err}
+	}
+
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("X-Device-ID", opts.DeviceID)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return &EndpointError{Source: SourceEdge, URL: endpoint, Err: err}
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, res.Body)
+
+	if res.StatusCode != http.StatusOK {
+		return &EndpointError{Source: SourceEdge, URL: endpoint, StatusCode: res.StatusCode}
+	}
+
+	return nil
 }
 
 func parseAbsoluteURL(raw string, sentinel error) (*url.URL, error) {

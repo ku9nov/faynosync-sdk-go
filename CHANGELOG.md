@@ -12,3 +12,4 @@ Initial release of the faynoSync Go SDK (transport layer only).
 - Sentinel errors and `EndpointError` for request failures
 - Optional `SystemPlatform` / `SystemArch` helpers
 - Examples: basic, edge fallback, custom HTTP client
+- Add telemetry beacon to the edge response
