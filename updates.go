@@ -163,6 +163,7 @@ func (c *Client) edgeCheckURL(opts CheckOptions) (string, error) {
 		opts.Channel,
 		opts.Platform,
 		opts.Arch,
+		"manual",
 		opts.Version + ".json",
 	}
 	appendEscapedPath(u, segments)

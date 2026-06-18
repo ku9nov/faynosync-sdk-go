@@ -84,7 +84,7 @@ func TestCheckForUpdatesUsesEdgeStaticResponse(t *testing.T) {
 	defer apiServer.Close()
 
 	edgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wantPath := "/responses/admin/test/nightly/darwin/arm64/0.0.0.5.json"
+		wantPath := "/responses/admin/test/nightly/darwin/arm64/manual/0.0.0.5.json"
 		if r.URL.EscapedPath() != wantPath {
 			t.Fatalf("unexpected edge path: %s", r.URL.EscapedPath())
 		}

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.0
+
+### Added
+
+- "Updater" field to edge path.
+
+
 ## v0.1.0
 
 Initial release of the faynoSync Go SDK (transport layer only).
