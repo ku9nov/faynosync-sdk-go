@@ -142,13 +142,13 @@ for _, packageURL := range resp.PackageURLs {
 When `EdgeURL` is configured, the SDK first tries a static JSON response:
 
 ```text
-GET /responses/{owner}/{app_name}/{channel}/{platform}/{arch}/{version}.json
+GET /responses/{owner}/{app_name}/{channel}/{platform}/{arch}/manual/{version}.json
 ```
 
 For example:
 
 ```text
-GET /responses/admin/test/nightly/darwin/arm64/0.0.0.5.json
+GET /responses/admin/test/nightly/darwin/arm64/manual/0.0.0.5.json
 ```
 
 If the edge response succeeds with HTTP 200 and valid JSON, `UpdateResponse.Source` is `SourceEdge`.
