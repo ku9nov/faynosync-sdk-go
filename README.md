@@ -89,6 +89,41 @@ resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
 
 `DeviceID` is optional. When set, the SDK sends it as the `X-Device-ID` header.
 
+## Staged Rollout
+
+faynoSync can ship a version to a controlled percentage of the fleet first (a staged/canary rollout). When the offered version's rollout is below 100%, `/checkVersion` includes a `rollout` object and the SDK decides — client-side — whether this install is included:
+
+```json
+{
+  "update_available": true,
+  "update_url": "https://downloads.example.com/app",
+  "rollout": { "percent": 20, "seed": "badadc23b08e3943" }
+}
+```
+
+The decision is deterministic and sticky, using the reference algorithm shared by every faynoSync SDK:
+
+```text
+bucket = sha256(deviceID + ":" + seed) → first 8 bytes, big-endian uint64, % 100
+included if bucket < rollout.percent
+```
+
+When the install is **not** in the bucket, the SDK forces `UpdateAvailable` to `false` **and clears `UpdateURL`/`PackageURLs`** — so a caller that inspects the URLs instead of `UpdateAvailable` still cannot pull an update the device was not offered. The `Rollout` field on the response exposes the decision for logging:
+
+```go
+resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{ /* ... */ DeviceID: "stable-device-id"})
+if err != nil {
+	log.Fatal(err)
+}
+if resp.Rollout != nil {
+	fmt.Println(resp.Rollout.Percent, resp.Rollout.Bucket, resp.Rollout.Eligible)
+}
+```
+
+`DeviceID` is required to participate: it must be the same stable value used for telemetry (`X-Device-ID`). Without it the bucket cannot be computed, so the install stays out of the rollout (`Eligible: false`, `Bucket: nil`) until a `DeviceID` is provided. Raising the percentage on the same version only ever adds installs. Rollout works identically in edge/CDN mode, since the same JSON body is served from the cached manifest.
+
+The `faynosync.RolloutBucket(deviceID, seed)` helper is exported if you need to compute a bucket yourself.
+
 ## Base API Request
 
 The BaseURL API request uses `GET /checkVersion`:
@@ -124,6 +159,8 @@ It may also return package-specific URLs with dynamic field names:
   "possible_rollback": true
 }
 ```
+
+When a version is under a staged rollout, the response also carries a `rollout` object (`{ percent, seed }`), decoded into `resp.Rollout` — see [Staged Rollout](#staged-rollout).
 
 The SDK decodes these into a typed response:
 

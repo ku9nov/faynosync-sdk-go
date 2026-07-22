@@ -126,6 +126,8 @@ func (c *Client) doUpdateRequest(ctx context.Context, method, endpoint, deviceID
 		return nil, &EndpointError{Source: source, URL: endpoint, Err: err}
 	}
 
+	updateResp.applyRollout(deviceID)
+
 	return &updateResp, nil
 }
 

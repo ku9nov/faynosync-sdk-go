@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0
+
+### Added
+
+- Staged (canary) rollout support in `CheckForUpdates`: when `/checkVersion` returns a `rollout` object (`percent`, `seed`), the SDK computes a deterministic, sticky per-device bucket (`sha256(deviceID + ":" + seed)` → first 8 bytes big-endian uint64 `% 100`) and includes the install only when `bucket < percent`. Excluded installs get `UpdateAvailable: false` with `UpdateURL`/`PackageURLs` cleared so the gate cannot be bypassed. Exposes the decision via the new `RolloutInfo` (`Rollout` on `UpdateResponse`) and the `RolloutBucket` helper. Requires `DeviceID`; without it the install stays out of the rollout. Works in edge/CDN mode too
+
 ## v0.2.0
 
 ### Added

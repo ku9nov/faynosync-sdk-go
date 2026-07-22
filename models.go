@@ -33,6 +33,13 @@ type UpdateResponse struct {
 	IsIntermediateRequired bool   `json:"is_intermediate_required,omitempty"`
 	PossibleRollback       bool   `json:"possible_rollback,omitempty"`
 
+	// Rollout is set only when the server offered a staged (canary) rollout for the
+	// version. When Rollout.Eligible is false the SDK has already forced
+	// UpdateAvailable to false and cleared UpdateURL/PackageURLs. It is decoded
+	// manually from the raw rollout object, so a malformed one is ignored rather than
+	// failing the whole response.
+	Rollout *RolloutInfo `json:"-"`
+
 	// PackageURLs contains package-specific URLs decoded from fields such as
 	// update_url_deb, update_url_rpm, or any future update_url_<package> key.
 	PackageURLs []PackageUpdateURL `json:"-"`
@@ -85,8 +92,50 @@ func (r *UpdateResponse) UnmarshalJSON(data []byte) error {
 
 	*r = UpdateResponse(fixed)
 	r.PackageURLs = packageURLs
+	r.Rollout = parseRollout(fields["rollout"])
 
 	return nil
+}
+
+// parseRollout decodes a rollout object, returning nil unless it carries both a numeric
+// percent and a non-empty string seed. This mirrors the JS SDK: a missing or malformed
+// rollout is treated as no rollout at all (full update, no gating).
+func parseRollout(raw json.RawMessage) *RolloutInfo {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var probe struct {
+		Percent *int    `json:"percent"`
+		Seed    *string `json:"seed"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return nil
+	}
+	if probe.Percent == nil || probe.Seed == nil || *probe.Seed == "" {
+		return nil
+	}
+
+	return &RolloutInfo{Percent: *probe.Percent, Seed: *probe.Seed}
+}
+
+// applyRollout evaluates a staged rollout against the given device and gates the
+// response. When the install is not in the rollout bucket the SDK forces
+// UpdateAvailable to false and clears the download URLs, so a caller that inspects
+// UpdateURL/PackageURLs instead of UpdateAvailable cannot bypass the gate.
+func (r *UpdateResponse) applyRollout(deviceID string) {
+	if r.Rollout == nil {
+		return
+	}
+
+	info := evaluateRollout(r.Rollout.Percent, r.Rollout.Seed, deviceID)
+	r.Rollout = &info
+
+	if r.UpdateAvailable && !info.Eligible {
+		r.UpdateAvailable = false
+		r.UpdateURL = ""
+		r.PackageURLs = []PackageUpdateURL{}
+	}
 }
 
 // UpdateSource identifies where an update response was loaded from.
