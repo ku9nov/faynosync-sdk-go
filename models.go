@@ -22,6 +22,11 @@ type CheckOptions struct {
 	// DeviceID optionally enables server-side telemetry when supported by the API.
 	// When empty, the X-Device-ID header is omitted.
 	DeviceID string
+
+	// DownloadToken authenticates update checks of a private app whose download mode is strict.
+	// It is scoped to one app and channel and is sent as the X-Download-Token header. A strict app
+	// answers a request without it exactly as it answers a request for an app that does not exist.
+	DownloadToken string
 }
 
 // UpdateResponse contains the typed faynoSync update check response.

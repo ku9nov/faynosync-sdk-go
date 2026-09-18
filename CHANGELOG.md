@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0
+
+### Added
+
+- `CheckOptions.DownloadToken` for private apps whose download mode is `strict`: the SDK sends it as the `X-Download-Token` header, and such an app answers a check without it exactly as it answers a check for an unknown app. The token is scoped to one app and channel.
+- `DownloadTokenHeader` and `StripDownloadTokenOnRedirect` for applications that fetch the artifact themselves: `/download` redirects to presigned storage, and Go forwards custom headers across hosts, so without the helper the token reaches the storage provider's logs.
+
+### Changed
+
+- `EdgeURL` is skipped when `DownloadToken` is set. A private app is never published to the edge, so the lookup could only miss and cost a request.
+
 ## v0.3.0
 
 ### Added

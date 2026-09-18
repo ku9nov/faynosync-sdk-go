@@ -89,6 +89,40 @@ resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
 
 `DeviceID` is optional. When set, the SDK sends it as the `X-Device-ID` header.
 
+`DownloadToken` is optional. It is only needed for a private app whose download mode is `strict`.
+
+## Private Apps
+
+A private app with `download_mode: unlisted` is served like a public one: knowing the owner and app name is enough, and no token is involved. Only `download_mode: strict` needs one — without it the app answers an update check exactly as it answers a check for an app that does not exist. Pass the download token of that app and channel:
+
+```go
+resp, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
+	Owner:         "admin",
+	AppName:       "internal-tool",
+	Version:       "1.2.0.4",
+	Channel:       "stable",
+	Platform:      "darwin",
+	Arch:          "arm64",
+	DownloadToken: os.Getenv("FAYNOSYNC_DOWNLOAD_TOKEN"),
+})
+```
+
+The token is scoped to one app and one channel, and the SDK sends it as the `X-Download-Token` header. A token of another channel is refused like no token at all. `EdgeURL` is skipped whenever a token is set: faynoSync refuses `cdn_edge` for private apps, so the edge lookup could only miss.
+
+The SDK does not download artifacts. When the application fetches the returned URL itself, it sends the same header — and must drop it when faynoSync redirects to storage:
+
+```go
+client := &http.Client{CheckRedirect: faynosync.StripDownloadTokenOnRedirect}
+
+req, _ := http.NewRequest(http.MethodGet, resp.UpdateURL, nil)
+req.Header.Set(faynosync.DownloadTokenHeader, token)
+res, err := client.Do(req)
+```
+
+`/download` answers with a redirect to a presigned storage URL, and Go forwards custom headers across hosts: it only drops `Authorization`, `Cookie` and `WWW-Authenticate`. Without `StripDownloadTokenOnRedirect` the token ends up in the storage provider's access logs.
+
+A runnable version of both steps is in `examples/private-app`.
+
 ## Staged Rollout
 
 faynoSync can ship a version to a controlled percentage of the fleet first (a staged/canary rollout). When the offered version's rollout is below 100%, `/checkVersion` includes a `rollout` object and the SDK decides — client-side — whether this install is included:
@@ -264,6 +298,7 @@ Runnable examples are available in:
 - `examples/basic`
 - `examples/edge-fallback`
 - `examples/custom-http-client`
+- `examples/private-app`
 
 ## Security Scope
 

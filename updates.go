@@ -28,7 +28,9 @@ func (c *Client) CheckForUpdates(ctx context.Context, opts CheckOptions) (*Updat
 	}
 
 	var edgeErr error
-	if c.edgeURL != "" {
+	// A private app cannot be served from the edge (faynoSync refuses cdn_edge for private apps), so a
+	// token means the edge lookup is a guaranteed miss and only costs a request.
+	if c.edgeURL != "" && opts.DownloadToken == "" {
 		resp, err := c.checkEdge(ctx, opts)
 		if err == nil {
 			if opts.DeviceID != "" {
@@ -86,7 +88,7 @@ func (c *Client) checkEdge(ctx context.Context, opts CheckOptions) (*UpdateRespo
 		return nil, &EndpointError{Source: SourceEdge, URL: c.edgeURL, Err: err}
 	}
 
-	return c.doUpdateRequest(ctx, http.MethodGet, endpoint, opts.DeviceID, SourceEdge)
+	return c.doUpdateRequest(ctx, http.MethodGet, endpoint, opts, SourceEdge)
 }
 
 func (c *Client) checkAPI(ctx context.Context, opts CheckOptions) (*UpdateResponse, error) {
@@ -95,10 +97,10 @@ func (c *Client) checkAPI(ctx context.Context, opts CheckOptions) (*UpdateRespon
 		return nil, &EndpointError{Source: SourceAPI, URL: c.baseURL, Err: err}
 	}
 
-	return c.doUpdateRequest(ctx, http.MethodGet, endpoint, opts.DeviceID, SourceAPI)
+	return c.doUpdateRequest(ctx, http.MethodGet, endpoint, opts, SourceAPI)
 }
 
-func (c *Client) doUpdateRequest(ctx context.Context, method, endpoint, deviceID string, source UpdateSource) (*UpdateResponse, error) {
+func (c *Client) doUpdateRequest(ctx context.Context, method, endpoint string, opts CheckOptions, source UpdateSource) (*UpdateResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
 		return nil, &EndpointError{Source: source, URL: endpoint, Err: err}
@@ -106,8 +108,11 @@ func (c *Client) doUpdateRequest(ctx context.Context, method, endpoint, deviceID
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	if deviceID != "" {
-		req.Header.Set("X-Device-ID", deviceID)
+	if opts.DeviceID != "" {
+		req.Header.Set("X-Device-ID", opts.DeviceID)
+	}
+	if opts.DownloadToken != "" {
+		req.Header.Set(DownloadTokenHeader, opts.DownloadToken)
 	}
 
 	res, err := c.httpClient.Do(req)
@@ -126,7 +131,7 @@ func (c *Client) doUpdateRequest(ctx context.Context, method, endpoint, deviceID
 		return nil, &EndpointError{Source: source, URL: endpoint, Err: err}
 	}
 
-	updateResp.applyRollout(deviceID)
+	updateResp.applyRollout(opts.DeviceID)
 
 	return &updateResp, nil
 }
