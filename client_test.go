@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -21,6 +22,9 @@ func TestCheckForUpdatesUsesBaseAPI(t *testing.T) {
 		}
 		if r.URL.Query().Get("app_name") != "test" {
 			t.Fatalf("unexpected app_name: %s", r.URL.Query().Get("app_name"))
+		}
+		if r.URL.Query().Get("updater") != "manual" {
+			t.Fatalf("unexpected updater: %s", r.URL.Query().Get("updater"))
 		}
 		if r.URL.Query().Get("version") != "0.0.0.5" {
 			t.Fatalf("unexpected version: %s", r.URL.Query().Get("version"))
@@ -543,6 +547,42 @@ func TestCheckForUpdatesValidation(t *testing.T) {
 			_, err := client.CheckForUpdates(context.Background(), tt.opts)
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestEdgeCheckURLMatchesServerObjectKey(t *testing.T) {
+	t.Parallel()
+
+	client := NewClient(Config{BaseURL: "https://api.example", EdgeURL: "https://cdn.example/base/"})
+
+	tests := []struct {
+		name string
+		opts func(*CheckOptions)
+		want string
+	}{
+		{"all dimensions", func(o *CheckOptions) {}, "/base/responses/admin/test/nightly/darwin/arm64/manual/0.0.0.5.json"},
+		{"dash in version", func(o *CheckOptions) { o.Version = "2.0.0-4" }, "/base/responses/admin/test/nightly/darwin/arm64/manual/2.0.0.4.json"},
+		{"no arch", func(o *CheckOptions) { o.Arch = "" }, "/base/responses/admin/test/nightly/darwin/manual/0.0.0.5.json"},
+		{"no platform drops updater", func(o *CheckOptions) { o.Platform = "" }, "/base/responses/admin/test/nightly/arm64/0.0.0.5.json"},
+		{"no platform and arch", func(o *CheckOptions) { o.Platform, o.Arch = "", "" }, "/base/responses/admin/test/nightly/0.0.0.5.json"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := defaultOptions()
+			tt.opts(&opts)
+			raw, err := client.edgeCheckURL(opts)
+			if err != nil {
+				t.Fatalf("edgeCheckURL returned error: %v", err)
+			}
+			u, err := url.Parse(raw)
+			if err != nil {
+				t.Fatalf("invalid URL %q: %v", raw, err)
+			}
+			if u.EscapedPath() != tt.want {
+				t.Fatalf("edge path = %s, want %s", u.EscapedPath(), tt.want)
 			}
 		})
 	}

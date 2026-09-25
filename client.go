@@ -8,6 +8,8 @@ import (
 const (
 	defaultTimeout = 30 * time.Second
 	userAgent      = "faynosync-go/1.0"
+	// sdkUpdater asks the server for its native JSON response rather than a framework feed.
+	sdkUpdater = "manual"
 )
 
 // Client is a concurrency-safe faynoSync SDK client.

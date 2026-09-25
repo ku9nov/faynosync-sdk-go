@@ -163,7 +163,7 @@ The `faynosync.RolloutBucket(deviceID, seed)` helper is exported if you need to 
 The BaseURL API request uses `GET /checkVersion`:
 
 ```text
-GET /checkVersion?app_name=test&version=0.0.0.5&channel=nightly&platform=darwin&arch=arm64&owner=admin
+GET /checkVersion?app_name=test&version=0.0.0.5&channel=nightly&platform=darwin&arch=arm64&owner=admin&updater=manual
 X-Device-ID: optional
 ```
 
@@ -221,6 +221,8 @@ For example:
 ```text
 GET /responses/admin/test/nightly/darwin/arm64/manual/0.0.0.5.json
 ```
+
+Empty `Channel`, `Platform` and `Arch` are left out of the path, the `manual` segment is dropped when `Platform` is empty, and `-` in the version becomes `.`, matching the object key the server writes.
 
 If the edge response succeeds with HTTP 200 and valid JSON, `UpdateResponse.Source` is `SourceEdge`.
 

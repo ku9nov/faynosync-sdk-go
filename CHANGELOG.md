@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.0
+
+### Fixed
+
+- Edge path matches the server's object key: empty `Channel`/`Platform`/`Arch` skipped, `-` in version becomes `.`.
+- API checks send `updater=manual`, so the response is always native JSON.
+
 ## v0.4.0
 
 ### Added

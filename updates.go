@@ -152,6 +152,7 @@ func (c *Client) apiCheckURL(opts CheckOptions) (string, error) {
 	values.Set("platform", opts.Platform)
 	values.Set("arch", opts.Arch)
 	values.Set("owner", opts.Owner)
+	values.Set("updater", sdkUpdater)
 	u.RawQuery = values.Encode()
 
 	return u.String(), nil
@@ -163,16 +164,19 @@ func (c *Client) edgeCheckURL(opts CheckOptions) (string, error) {
 		return "", err
 	}
 
-	segments := []string{
-		"responses",
-		opts.Owner,
-		opts.AppName,
-		opts.Channel,
-		opts.Platform,
-		opts.Arch,
-		"manual",
-		opts.Version + ".json",
+	// Mirrors the server's CDN object key: empty dimensions are left out, and without a
+	// platform the server resolves no updater, so that segment is dropped as well.
+	updater := sdkUpdater
+	if opts.Platform == "" {
+		updater = ""
 	}
+	segments := []string{"responses", opts.Owner, opts.AppName}
+	for _, segment := range []string{opts.Channel, opts.Platform, opts.Arch, updater} {
+		if segment != "" {
+			segments = append(segments, segment)
+		}
+	}
+	segments = append(segments, strings.ReplaceAll(opts.Version, "-", ".")+".json")
 	appendEscapedPath(u, segments)
 	u.RawQuery = ""
 
